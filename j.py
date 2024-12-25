@@ -30,7 +30,7 @@ def header():
     clear_screen()
     console.print(f"""
     {MAGENTA}Instagram Reporting Tool
-    {CYAN}Version: Improved
+    {CYAN}Version: Final
     {RESET}""", style="bold magenta")
 
 def get_report_type():
@@ -104,6 +104,32 @@ def login_instagram(username, password):
         console.print("[bold red]Login failed. Check credentials.[/bold red]")
         exit()
 
+def fetch_target_id(username, session_id, csrf_token):
+    """يحاول جلب معرف الهدف باستخدام عدة طرق."""
+    search_urls = [
+        f"https://www.instagram.com/{username}/",
+        f"https://i.instagram.com/api/v1/users/web_profile_info/?username={username}"
+    ]
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Cookie": f"csrftoken={csrf_token}; sessionid={session_id}"
+    }
+    for url in search_urls:
+        try:
+            response = get(url, headers=headers)
+            if response.status_code == 200:
+                # طريقة 1: استخراج ID باستخدام regex
+                match = re.search(r'"profile_id":"(\d+)"', response.text)
+                if match:
+                    return match.group(1)
+                # طريقة 2: استخراج ID باستخدام JSON response
+                json_data = response.json()
+                return json_data.get("data", {}).get("user", {}).get("id")
+        except Exception:
+            continue
+    console.print("[bold red]Failed to fetch target ID. Please enter manually.[/bold red]")
+    return input("Enter target ID manually: ")
+
 def main():
     """النقطة الرئيسية لتشغيل البرنامج."""
     header()
@@ -114,17 +140,11 @@ def main():
     session_id, csrf_token = login_instagram(username, password)
 
     target = input("Enter target username: ")
+    target_id = fetch_target_id(target, session_id, csrf_token)
+    console.print(f"[bold cyan]Target ID: {target_id}[/bold cyan]")
+
     report_type = get_report_type()
-    
-    # Fetch target ID
-    search_url = f"https://www.instagram.com/{target}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = get(search_url, headers=headers)
-    try:
-        target_id = re.findall('"profile_id":"(\\d+)"', response.text)[0]
-        report_instagram(target_id, session_id, csrf_token, report_type)
-    except IndexError:
-        console.print("[bold red]Target not found.[/bold red]")
+    report_instagram(target_id, session_id, csrf_token, report_type)
 
 if __name__ == "__main__":
     main()
