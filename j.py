@@ -1,14 +1,10 @@
 import os
 import re
 import uuid
+import time
 from datetime import datetime
 from requests import post, get
 from rich.console import Console
-
-# إعداد المظهر والتنسيق
-MAGENTA = "\033[1m\033[35m"
-CYAN = "\033[1m\033[36m"
-RESET = "\033[0m"
 
 UID = str(uuid.uuid4())
 console = Console()
@@ -28,10 +24,10 @@ def clear_screen():
 def header():
     """يعرض عنوان البرنامج."""
     clear_screen()
-    console.print(f"""
-    {MAGENTA}Instagram Reporting Tool
-    {CYAN}Version: Final
-    {RESET}""", style="bold magenta")
+    console.print("""
+    [bold magenta]Instagram Real Reporting Tool[/bold magenta]
+    [cyan]Ensure reports are valid and authentic.[/cyan]
+    """, style="bold magenta")
 
 def get_report_type():
     """يعرض قائمة أنواع البلاغات ويطلب من المستخدم اختيار واحد."""
@@ -59,24 +55,26 @@ def get_report_type():
 
 def report_instagram(target_id, session_id, csrf_token, report_type):
     """يرسل البلاغ إلى إنستاجرام."""
-    url = f"https://i.instagram.com/users/{target_id}/flag/"
+    url = f"https://i.instagram.com/api/v1/media/{target_id}/flag/"
     headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Cookie": f"sessionid={session_id}",
+        "User-Agent": "Instagram 114.0.0.38.120 Android",
+        "Cookie": f"sessionid={session_id}; csrftoken={csrf_token}",
         "X-CSRFToken": csrf_token,
         "Content-Type": "application/x-www-form-urlencoded"
     }
-    data = f"source_name=&reason_id={report_type}&frx_context="
-    while True:
-        response = post(url, headers=headers, data=data)
-        if response.status_code == 429:
-            console.print("[bold red]Rate limited. Please try later.[/bold red]")
-            break
-        elif response.status_code == 500:
-            console.print("[bold red]Target not found.[/bold red]")
-            break
-        else:
-            console.print(f"[bold green]Report sent. Status: {response.status_code}[/bold green]")
+    data = {
+        "media_id": target_id,
+        "reason_id": report_type,
+        "source_name": "",
+        "frx_context": ""
+    }
+    response = post(url, headers=headers, data=data)
+    if response.status_code == 200 and "ok" in response.text.lower():
+        console.print("[bold green]Report successfully submitted![/bold green]")
+    elif response.status_code == 429:
+        console.print("[bold red]Rate limit reached. Try again later.[/bold red]")
+    else:
+        console.print(f"[bold red]Failed to submit report. Status: {response.status_code}[/bold red]")
 
 def login_instagram(username, password):
     """يسجل الدخول إلى إنستاجرام."""
@@ -106,29 +104,22 @@ def login_instagram(username, password):
 
 def fetch_target_id(username, session_id, csrf_token):
     """يحاول جلب معرف الهدف باستخدام عدة طرق."""
-    search_urls = [
-        f"https://www.instagram.com/{username}/",
-        f"https://i.instagram.com/api/v1/users/web_profile_info/?username={username}"
-    ]
+    search_url = f"https://www.instagram.com/{username}/?__a=1&__d=dis"
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Cookie": f"csrftoken={csrf_token}; sessionid={session_id}"
     }
-    for url in search_urls:
+    response = get(search_url, headers=headers)
+    if response.status_code == 200:
         try:
-            response = get(url, headers=headers)
-            if response.status_code == 200:
-                # طريقة 1: استخراج ID باستخدام regex
-                match = re.search(r'"profile_id":"(\d+)"', response.text)
-                if match:
-                    return match.group(1)
-                # طريقة 2: استخراج ID باستخدام JSON response
-                json_data = response.json()
-                return json_data.get("data", {}).get("user", {}).get("id")
-        except Exception:
-            continue
-    console.print("[bold red]Failed to fetch target ID. Please enter manually.[/bold red]")
-    return input("Enter target ID manually: ")
+            data = response.json()
+            return data['graphql']['user']['id']
+        except KeyError:
+            console.print("[bold red]Failed to fetch target ID. Please try again.[/bold red]")
+            exit()
+    else:
+        console.print("[bold red]Failed to fetch target ID. Status: {response.status_code}[/bold red]")
+        exit()
 
 def main():
     """النقطة الرئيسية لتشغيل البرنامج."""
@@ -145,6 +136,9 @@ def main():
 
     report_type = get_report_type()
     report_instagram(target_id, session_id, csrf_token, report_type)
+
+    # فاصل زمني لمنع اكتشاف الأداة كروبوت
+    time.sleep(5)
 
 if __name__ == "__main__":
     main()
