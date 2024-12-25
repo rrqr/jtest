@@ -104,22 +104,38 @@ def login_instagram(username, password):
 
 def fetch_target_id(username, session_id, csrf_token):
     """يحاول جلب معرف الهدف باستخدام عدة طرق."""
-    search_url = f"https://www.instagram.com/{username}/?__a=1&__d=dis"
+    search_urls = [
+        f"https://www.instagram.com/{username}/?__a=1&__d=dis",  # JSON endpoint
+        f"https://i.instagram.com/api/v1/users/web_profile_info/?username={username}",  # Web profile API
+    ]
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Cookie": f"csrftoken={csrf_token}; sessionid={session_id}"
     }
-    response = get(search_url, headers=headers)
-    if response.status_code == 200:
+
+    for url in search_urls:
         try:
-            data = response.json()
-            return data['graphql']['user']['id']
-        except KeyError:
-            console.print("[bold red]Failed to fetch target ID. Please try again.[/bold red]")
-            exit()
-    else:
-        console.print("[bold red]Failed to fetch target ID. Status: {response.status_code}[/bold red]")
-        exit()
+            response = get(url, headers=headers)
+            console.print(f"[bold cyan]Trying URL: {url}[/bold cyan]")
+            console.print(f"[bold cyan]Response Status: {response.status_code}[/bold cyan]")
+            if response.status_code == 200:
+                # المحاولة الأولى: قراءة JSON للمعرف
+                try:
+                    data = response.json()
+                    if "graphql" in data:
+                        return data["graphql"]["user"]["id"]
+                    elif "data" in data and "user" in data["data"]:
+                        return data["data"]["user"]["id"]
+                except KeyError:
+                    console.print("[bold yellow]Attempt failed, trying next method...[/bold yellow]")
+            else:
+                console.print(f"[bold yellow]Failed with status {response.status_code}, trying next method...[/bold yellow]")
+        except Exception as e:
+            console.print(f"[bold red]Error: {e}[/bold red]")
+
+    # إذا فشلت كل المحاولات، طلب المعرف يدويًا
+    console.print("[bold red]Failed to fetch target ID. Please enter manually.[/bold red]")
+    return input("Enter target ID manually: ")
 
 def main():
     """النقطة الرئيسية لتشغيل البرنامج."""
